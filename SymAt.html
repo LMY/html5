@@ -1,0 +1,335 @@
+<html>
+	<script>
+
+// parameters
+var nx=32;
+var ny=nx;
+var dt=0.25;
+var speed_multiplier=1;
+var spacing = 30;
+var radious = 8;
+var km = 0.2;					// k/m
+var ka = 0.08;					// friction (1-ka)
+var periodic=true;				// periodic boundary condition?
+var bound=false;				// fixed border? (will be set false if periodic=true)
+var backgroundColor="ffffff";
+var ballColor="0000ff";
+var drawCenter=false;
+var centerColor="ff0000";
+var initialNoise = 1.0;
+
+// vars
+var dt2;
+var r2;
+var context;
+
+var xs;
+var dxs;
+var axs;
+var neighbors;
+
+var pause=false;
+var dragselected=new Array(0, 0);
+var mousepos;
+var	dragging = false;
+
+
+
+function init()
+{
+	context = myCanvas.getContext('2d');
+	dt2 = Math.pow(dt, 2);
+	r2 = Math.pow(radious, 2);
+	
+	if (periodic) bound = false;
+	
+	myCanvas.width = nx*spacing;
+	myCanvas.height = ny*spacing;
+  
+	init_neighbors(4);
+  
+	reset();
+	
+	RandomMovementAll(radious*initialNoise);
+	setInterval(draw, 1/dt/speed_multiplier);
+}
+
+
+function init_neighbors(howmany)
+{
+	neighbors = new Array();
+	
+	var nnum = 0;
+	
+	if (howmany >= 2) {
+		neighbors[nnum++] = new Array(-1, 0);
+		neighbors[nnum++] = new Array(+1, 0);
+	}
+	if (howmany >= 4) {
+		neighbors[nnum++] = new Array(0, -1);
+		neighbors[nnum++] = new Array(0, +1);
+	}
+	if (howmany >= 8) {
+		neighbors[nnum++] = new Array(-1, -1);
+		neighbors[nnum++] = new Array(+1, -1);
+		neighbors[nnum++] = new Array(-1, +1);
+		neighbors[nnum++] = new Array(+1, +1);
+	}
+}
+
+
+function reset()
+{
+	xs = new Array();
+	dxs = new Array();
+	axs = new Array();
+	
+	for (y=0; y<ny; y++) {
+		xs[y] = new Array();
+		dxs[y] = new Array();
+		axs[y] = new Array();
+
+		for (x=0; x<nx; x++) {
+			xs[y][x] = new Array(myCanvas.width/2	 + (x-(nx-1)/2)*spacing, myCanvas.height/2  + (y-(ny-1)/2)*spacing);
+			dxs[y][x] = new Array(0, 0);
+			axs[y][x] = new Array(0, 0);
+		}
+	}
+}
+
+
+function RandomMovementAll(delta)
+{
+	var lowlimy = bound?1:0;
+	var highlimy = bound?ny-1:ny;
+	var lowlimx = bound?1:0;
+	var highlimx = bound?nx-1:nx;
+
+	for (y=lowlimy; y<highlimy; y++)
+		for (x=lowlimx; x<highlimx; x++)
+			RandomMovement(x, y, delta);
+}
+
+
+function RandomMovement(x, y, delta)
+{
+	xs[y][x][0] += delta*2*(Math.random()-0.5);
+	xs[y][x][1] += delta*2*(Math.random()-0.5);
+}
+
+
+function calcForces()
+{
+	var lowlimy = bound?1:0;
+	var highlimy = bound?ny-1:ny;
+	var lowlimx = bound?1:0;
+	var highlimx = bound?nx-1:nx;
+
+	for (y=lowlimy; y<highlimy; y++)
+		for (x=lowlimx; x<highlimx; x++) {
+			axs[y][x][0] = 0;
+			axs[y][x][1] = 0;
+
+			for (i=0; i<neighbors.length; i++) {
+				var curx = x+neighbors[i][0];
+				var cury = y+neighbors[i][1];
+				var dr = new Array(0, 0);
+				
+				if (periodic) {
+					if (curx < 0) { curx = nx-1; dr[0] = +nx*spacing; }
+					else if (curx >= nx) { curx = 0; dr[0] = -nx*spacing; }
+
+					if (cury < 0) { cury = ny-1; dr[1] = +ny*spacing; }
+					else if (cury >= ny) { cury = 0; dr[1] = -ny*spacing; }
+				}
+				
+				if (curx < 0 || curx >= nx || cury < 0 || cury >= ny)
+					continue;
+				
+				for (c=0; c<2; c++)
+					axs[y][x][c] += -km*(xs[y][x][c]-xs[cury][curx][c]+dr[c]);
+			}
+		}
+}
+
+
+function updatePhysics()
+{
+	for (iter=0; iter<2; iter++) {
+		calcForces();
+
+		for (y=0; y<ny; y++)
+			for (x=0; x<nx; x++)
+				for (c=0; c<2; c++) {
+					if (iter == 0)	xs[y][x][c] += dxs[y][x][c]*(1-ka)*dt + 0.5*axs[y][x][c]*dt2;		// position is updated only at first iteration,  ds = vdt + 1/2 a dt^2
+									dxs[y][x][c] += 0.5*axs[y][x][c]*(1-ka)*dt;							// speed += [a(t)+a(t+dt)]/2 * dt
+				}
+	}
+}
+
+
+function draw()
+{
+	if (!pause)
+		updatePhysics();
+
+	context.fillStyle=backgroundColor;
+	context.fillRect(0,0, myCanvas.width, myCanvas.height);
+
+	for (y=0; y<ny; y++)
+		for (x=0; x<nx; x++) {
+			context.beginPath();
+			context.fillStyle=ballColor;
+			
+			if (dragging && x==dragselected[0] && y==dragselected[1])
+				context.arc(mousepos[0], mousepos[1], radious, 0, Math.PI*2, true);
+			else
+				context.arc(xs[y][x][0], xs[y][x][1], radious, 0, Math.PI*2, true);
+				
+			context.closePath();
+			context.fill();  
+		}
+		
+	if (drawCenter) {
+		context.fillStyle=centerColor;
+		context.fillRect(myCanvas.width/2-radious/2, myCanvas.height/2-radious/2, radious, radious);
+	}
+}
+
+function stopBorder()
+{
+	for (c=0; c<2; c++) {
+		for (x=0; x<nx; x++) {
+			dxs[0][x][c] = 0;
+			axs[0][x][c] = 0;
+			dxs[ny-1][x][c] = 0;
+			axs[ny-1][x][c] = 0;
+		}
+		
+		for (y=0; y<ny; y++) {
+			dxs[y][0][c] = 0;
+			axs[y][0][c] = 0;
+			dxs[y][nx-1][c] = 0;
+			axs[y][nx-1][c] = 0;
+		}
+	}
+}
+		
+function clickOn(x, y)
+{
+	RandomMovement(x, y, 4*radious);
+}
+
+/*
+function onClick(event)
+{
+	var clickx = getMouseXY(event);
+	
+	for (y=0; y<ny; y++)
+		for (x=0; x<nx; x++) {
+			var dist = 0;
+			
+			for (c=0; c<2; c++)
+				dist += Math.pow(clickx[c]-xs[y][x][c], 2);
+
+			if (dist <= r2) {
+				clickOn(x, y);
+				return;
+			}
+		}
+}
+*/
+
+function getMouseXY(event)
+{
+	var mainEvent = event ? event : window.event;
+	return new Array(mainEvent.pageX - myCanvas.offsetLeft, mainEvent.pageY - myCanvas.offsetTop);
+}
+
+
+function onMouseDown(event)
+{
+	var clickx = getMouseXY(event);
+
+	for (y=0; y<ny; y++)
+		for (x=0; x<nx; x++) {
+			var dist = 0;
+			
+			for (c=0; c<2; c++)
+				dist += Math.pow(clickx[c]-xs[y][x][c], 2);
+
+			if (dist <= r2) {
+				// drag start
+				dragselected = new Array(x, y);
+				mousepos = clickx;
+				dragging = true;
+				return;
+			}
+		}
+}
+
+
+function onMouseMove(event)
+{
+	if (!dragging)
+		return;
+
+	mousepos = getMouseXY(event);
+	
+	// if user drag a ball outside of our canvas, stop dragging it
+	if (mousepos[0] < 0 || mousepos[0] > myCanvas.width || mousepos[1] <= 0 || mousepos[1] >= myCanvas.height-1)
+		onMouseUp(event);
+}
+
+
+function onMouseUp(event)
+{
+	if (!dragging)
+		return;
+	
+	// drag stop
+	dragging = false;
+	xs[dragselected[1]][dragselected[0]] = getMouseXY(event);
+	dxs[dragselected[1]][dragselected[0]] = new Array(0, 0);
+	axs[dragselected[1]][dragselected[0]] = new Array(0, 0);
+}
+
+
+function onKeyPress(evt)
+{
+	var key = String.fromCharCode((evt.which) ? evt.which : event.keyCode);
+	
+	if (key == "r")
+		reset();
+	else if (key == "a")
+		RandomMovementAll(radious*initialNoise/2);
+	else if (key == "k")
+		km *= 2;
+	else if (key == "l")
+		km /= 2;
+	else if (key == "i")
+		ka *= 2;
+	else if (key == "o")
+		ka /= 2;
+	else if (key == "p")
+		pause = !pause;
+	else if (key == "t")
+		dt = -dt;
+	else if (key == "x")
+	{
+		bound = periodic;
+		periodic = !bound;
+		
+		if (bound)
+			stopBorder();		// try commenting this line, it's worth the trip
+			
+	}
+}
+
+	</script>
+
+	<body bgcolor="Silver" onLoad="init();" onMouseUp="onMouseUp(event)" onMouseDown="onMouseDown(event)" onKeyPress="onKeyPress(event)" onMouseMove="onMouseMove(event);">
+		<center><canvas id="myCanvas" /></center>
+	</body>
+
+</html>

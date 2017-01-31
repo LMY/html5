@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<body>
+	<canvas id="myCanvas" width="1000" height="600" style="border:1px solid #d3d3d3;">
+		Your browser does not support the canvas element.
+	</canvas>
+
+<script>
+	function drawText(context, text, xpos, ypos, font, fontsize, spacing, fillcolor) {
+	
+		if (!xpos) xpos = 1;
+		if (!ypos) ypos = 1;
+		if (!font) font = "Verdana";
+		if (!fontsize) fontsize = 15;
+		if (!spacing) spacing = 5;
+	
+		context.font = fontsize+'pt '+font;
+		
+		const lines = text.split("\n");
+		const szsp = fontsize+spacing;
+		var maxLineLen = -1;
+		
+		for (i=0; i<lines.length; i++) {
+			context.fillText(lines[i], xpos+spacing, ypos+szsp*i+fontsize + spacing);
+			if (lines[i].length > maxLineLen)
+				maxLineLen = lines[i].length;
+		}
+		
+		if (fillcolor && maxLineLen > 0) {
+			context.fillStyle = fillcolor;
+			context.globalAlpha=0.2;
+			context.fillRect(xpos, ypos, maxLineLen*(fontsize*0.74)+spacing, szsp*lines.length+spacing); 
+			context.strokeRect(xpos, ypos, maxLineLen*(fontsize*0.74)+spacing, szsp*lines.length+spacing); 
+			context.globalAlpha=1.0;
+		}
+			
+		context.fill();
+	}
+
+	function drawString(ctx, text, posX, posY, textColor, rotation, font, fontSize) {
+		var lines = text.split("\n");
+		if (!rotation) rotation = 0;
+		if (!font) font = "'serif'";
+		if (!fontSize) fontSize = 16;
+		if (!textColor) textColor = '#000000';
+		
+		ctx.save();
+		
+		ctx.font = fontSize + "px " + font;
+		ctx.fillStyle = textColor;
+		ctx.translate(posX, posY);
+		ctx.rotate(rotation * Math.PI / 180);
+		for (i = 0; i < lines.length; i++)
+			ctx.fillText(lines[i], 0, i*fontSize);
+
+		ctx.restore();
+	}
+	
+	var canvas = document.getElementById("myCanvas");
+	var context = canvas.getContext("2d");
+
+	context.fillStyle = 'red';
+	context.strokeStyle = 'black';
+	var text = 'q some action\na some other action\nd something\nj ehhh\nk wew';
+	drawText(context, text);
+	drawText(context, text);
+	
+	
+//	drawString(context, text, 100, 200, "red", 90, "arial", 12);
+</script>
+</body>
+</html>

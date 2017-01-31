@@ -1,0 +1,124 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <style>
+      body {
+        margin: 0px;
+        padding: 0px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="1600" height="900" />
+    <script>
+
+		function draw_axis(context) {
+			// draw x axis
+			context.strokeStyle = 'red';
+			context.beginPath();
+			context.moveTo(0, canvas.height/2);
+			context.lineTo(canvas.width, canvas.height/2);
+			context.stroke();
+			// draw y axis
+			context.beginPath();
+			context.strokeStyle = 'green';
+			context.moveTo(canvas.width/2, 0);
+			context.lineTo(canvas.width/2, canvas.height);
+			context.stroke();
+			context.strokeStyle = 'black';
+		}
+	
+		// main functions
+		function initialize() {
+		}
+
+		function draw(context, canvas) {
+			// draw_axis();
+		}
+		
+		function update(canvas, context, time) {
+		}
+		
+		
+		var clicked = false;
+		var selectwaspaused = false;
+		
+		function mousedown(event) {
+			clicked = true;
+			var lastclick = new vec2(event.pageX, event.pageY);
+
+			selectwaspaused = pause;
+			var validclick = false; // TODO: process click and set valid
+			if (!pause)
+				pause = validclick;	// if running and click is valid (on a node): pause
+		}
+		function mousemove(event) {
+			if (clicked) {
+				var movepos = new vec2(event.pageX, event.pageY);
+				// TODO: process move
+			}
+		}
+		function mouseup(event) {
+			// TODO: deselect
+			clicked = false;
+			pause = selectwaspaused;			// restore pre-click play state
+		}
+		function keypress(event) {
+			switch (event.key) {
+				case 'p':
+					pause = !pause;
+					break;
+				case '+': animation_speed = animation_speed >= 1 ? animation_speed+1 : animation_speed*2; break;
+				case '-': animation_speed = animation_speed > 1 ? animation_speed-1 : animation_speed/2; break;
+				case '0': animation_speed = 1; break;
+			}
+		}
+		
+		// 3.global stuff
+		var pause = false;
+		var FPS = 60;
+		var animation_speed = 1;
+		var canvas = document.getElementById('myCanvas');
+		var context = canvas.getContext('2d');
+
+		window.requestAnimFrame = (function(callback) {
+			return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
+			function(callback) { window.setTimeout(callback, 1000 / FPS); };
+		})();
+		
+		function log(text) {
+			pause = true;
+			alert(text);
+		}
+
+		var prevTime = -1;	// for dt
+		var startTime = -1;
+		
+		function mainloop(canvas, context) {
+			var now = (new Date()).getTime();
+			if (startTime < 0) startTime = now;								// set time0, if not yet initialized
+			if (prevTime < 0) prevTime = now;								// set prevTime, if not yet initialized
+			var dt = 1000 / FPS; //now - prevTime;
+			prevTime = now;
+			
+			if (!pause)
+				update(canvas, context, dt*animation_speed/1000);			// update
+				
+			context.clearRect(0, 0, canvas.width, canvas.height);			// clear
+			draw(context, canvas);											// draw
+			requestAnimFrame(function() { mainloop(canvas, context); });	// request new frame
+		}
+		
+		var waspaused = false;
+		window.onblur = function() { waspaused = pause; pause = true; };	// on lose focus: pause
+		window.onfocus = function() { pause = waspaused; };					// on focus: unpause, if needed
+		// register mouse and keyboard event listeners
+		window.addEventListener("keypress", keypress, false);
+		canvas.addEventListener('mousedown', mousedown, false);
+		canvas.addEventListener('mousemove', mousemove, false);
+		canvas.addEventListener('mouseup', mouseup, false);
+		initialize();
+		mainloop(canvas, context);
+    </script>
+  </body>
+</html>     

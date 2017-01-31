@@ -1,0 +1,135 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <style>
+      body {
+        margin: 0px;
+        padding: 0px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="1600" height="900" />
+    <script>
+		function vec2(tx, ty) {
+			this.x = tx;
+			this.y = ty;
+		}
+		vec2.prototype = {
+			zero: function() { this.x = 0; this.y = 0; },
+			add: function(p) { return new vec2(this.x+p.x, this.y+p.y); },
+			sub: function(p) { return new vec2(this.x-p.x, this.y-p.y);	},
+			mul: function(k) { return new vec2(this.x*k, this.y*k);	},
+			div: function(k) { return new vec2(this.x/k, this.y/k);	},
+			inv: function()  { return mul(-1); },
+			dot: function(p) { return this.x*p.x + this.y*p.y; },
+			inc: function(p) { this.x += p.x; this.y += p.y; },
+			dec: function(p) { this.x -= p.x; this.y -= p.y; },
+			pmul: function(k) { this.x *= k; this.y *= k; },
+			length2 : function() { return this.x * this.x + this.y * this.y; }
+		}
+		vec2.null = new vec2(0, 0);
+	
+		// main functions
+		function reset_particle(i) {
+			particle[i] = new vec2(emission_x, emission_y);
+			
+			var theta = anglemin + (Math.PI - 2*anglemin)*Math.random();
+			var speed = -(vmin + (vmax - vmin)*Math.random());
+			
+			speeds[i] = new vec2(Math.cos(theta), Math.sin(theta)).mul(speed);
+		}
+				
+		function initialize(canvas) {
+			particle = [];
+			speeds = [];
+	
+			for (i=0; i<particlen; i++)
+				reset_particle(i);
+		}
+
+		function draw(context, canvas) {
+			context.fillStyle = starColor;
+			
+			for (i=0; i<particle.length; i++) {
+				context.beginPath();
+				context.arc(particle[i].x, particle[i].y, radious, 0, Math.PI*2, true);
+				context.closePath();
+				context.fill();  
+			}
+		}
+		
+		function update(canvas, context, deltaT) {
+			for (i=0; i<particle.length; i++)
+				if (particle[i].x < 0 || particle[i].x > myCanvas.width  ||  particle[i].y < 0 || particle[i].y > myCanvas.height)
+					reset_particle(i);
+				else {
+					speeds[i].y -= g;
+					particle[i].inc( speeds[i].mul(deltaT) );
+				}
+		}
+
+		var canvas = document.getElementById('myCanvas');
+		var context = canvas.getContext('2d');
+		
+		var emission_x = canvas.width/2;
+		var emission_y = canvas.height;
+		var backgroundColor="white";
+		var starColor="blue";
+		var particlen = 250;
+		var radious = 3;
+		var anglemin = Math.PI*0.6;	// minimo angolo di emissione
+		var g = -1;					// costante gravitazionale
+		var vmin = 5;				// velocità minima di una particella
+		var vmax = 300;				// velocità massima di una particella
+
+		var particle;	// (x,y,alpha)
+		var speeds;		// (px, py)
+		
+		function keypress(event) {
+			switch (event.key) {
+				case 'p':
+					pause = !pause;
+					break;
+				case '+': animation_speed = animation_speed >= 1 ? animation_speed+1 : animation_speed*2; break;
+				case '-': animation_speed = animation_speed > 1 ? animation_speed-1 : animation_speed/2; break;
+				case '0': animation_speed = 1; break;
+				
+				case 'r': initialize(canvas); break;
+				case 'q': particlen += 10; initialize(canvas); break;
+				case 'w': particlen = Math.max(particlen-10, 1); initialize(canvas); break;
+				case 'b': backgroundColor = backgroundColor == "white" ? "black" : "white"; break;
+			}
+		}
+		
+		// 3.global stuff
+		var pause = false;
+		var FPS = 60;
+		var animation_speed = 1;
+
+		window.requestAnimFrame = (function(callback) {
+			return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
+			function(callback) { window.setTimeout(callback, 1000 / FPS); };
+		})();
+		
+		function mainloop(canvas, context) {
+			var dt = 1000 / FPS;
+			if (!pause)
+				update(canvas, context, dt*animation_speed/1000);			// update
+				
+			context.fillStyle = backgroundColor;
+			context.fillRect(0, 0, myCanvas.width, myCanvas.height);		// clear
+			draw(context, canvas);											// draw
+			requestAnimFrame(function() { mainloop(canvas, context); });	// request new frame
+		}
+		
+		var waspaused = false;
+		window.onblur = function() { waspaused = pause; pause = true; };	// on lose focus: pause
+		window.onfocus = function() { pause = waspaused; };					// on focus: unpause, if needed
+		// register mouse and keyboard event listeners
+		window.addEventListener("keypress", keypress, false);
+		initialize();
+		mainloop(canvas, context);
+    </script>
+  </body>
+</html>     

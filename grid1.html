@@ -1,0 +1,323 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <style>
+      body {
+        margin: 0px;
+        padding: 0px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="1600" height="900" />
+    <script>
+
+		function vec2(tx, ty) {
+			this.x = tx;
+			this.y = ty;
+		}
+		vec2.prototype = {
+			zero: function() { this.x = 0; this.y = 0; },
+			add: function(p) { return new vec2(this.x+p.x, this.y+p.y); },
+			sub: function(p) { return new vec2(this.x-p.x, this.y-p.y);	},
+			mul: function(k) { return new vec2(this.x*k, this.y*k);	},
+			div: function(k) { return new vec2(this.x/k, this.y/k);	},
+			inv: function()  { return mul(-1); },
+			dot: function(p) { return this.x*p.x + this.y*p.y; },
+			inc: function(p) { this.x += p.x; this.y += p.y; },
+			dec: function(p) { this.x -= p.x; this.y -= p.y; },
+			pmul: function(k) { this.x *= k; this.y *= k; },
+			length2 : function() { return this.x * this.x + this.y * this.y; }
+		}
+		vec2.null = new vec2(0, 0);
+		
+
+		function gridNode(p, m, r) {
+			this.pos = p;
+			this.spd = new vec2(0, 0);
+			this.mass = m;
+			this.mu = 1;
+			this.radius = r;
+		}
+		gridNode.prototype = {
+			draw : function(context) {
+				context.beginPath();
+				context.arc(this.pos.x, this.pos.y, this.radius, 0, 2 * Math.PI, false);
+				context.fillStyle = 'blue';
+				context.fill();
+			},
+			update : function(canvas, time) {}
+		}
+		
+
+		function gridArc(node1, node2, kconst, boundCorrection) {
+			this.n1 = node1;
+			this.n2 = node2;
+			this.k = typeof kconst !== 'undefined' ? kconst : 1;
+			this.corr = typeof boundCorrection !== 'undefined' ? boundCorrection : vec2.null; // this.corr is READONLY
+		}
+		gridArc.prototype = {
+			draw : function(context, grid) {
+				if (this.corr.x != 0 || this.corr.y != 0) return;
+				context.beginPath();
+				context.moveTo(grid.nodes[this.n1].pos.x, grid.nodes[this.n1].pos.y);
+				context.lineTo(grid.nodes[this.n2].pos.x, grid.nodes[this.n2].pos.y);
+				context.stroke();
+			},
+			update : function(canvas, time) {}
+		}
+		
+		
+		function Grid(nodesX, nodesY, spacingX, spacingY, canvas) {
+			this.nodes = [];
+			this.forces1 = [];
+			this.forces2 = [];
+			this.arcs = [];
+			this.gridSpacingX = spacingX;
+			this.gridSpacingY = spacingY;
+			this.gridNodesX = nodesX;
+			this.gridNodesY = nodesY;
+			this.gridDeltaX = (canvas.width-this.gridSpacingX*(this.gridNodesX-1))/2;
+			this.gridDeltaY = (canvas.height-this.gridSpacingY*(this.gridNodesY-1))/2;
+			this.selected = -1;
+			
+			this.reset();
+		}
+		Grid.prototype = {
+			reset : function() {
+				var i = 0;
+				
+				var karc = 10;
+				var periodic_bounds = true;
+				
+				for (var y=0; y<this.gridNodesY; y++)
+					for (var x=0; x<this.gridNodesX; x++) {
+						if (x != this.gridNodesX-1)
+							this.arcs[this.arcs.length] = new gridArc(i, i+1, karc, vec2.null);
+						else if (periodic_bounds)
+							this.arcs[this.arcs.length] = new gridArc(i, i+1-this.gridNodesX, karc, new vec2(this.gridNodesX*this.gridSpacingX, 0));
+							
+						if (y != this.gridNodesY-1)
+							this.arcs[this.arcs.length] = new gridArc(i, i+this.gridNodesX, karc, vec2.null);
+						else if (periodic_bounds)
+							this.arcs[this.arcs.length] = new gridArc(i, i+this.gridNodesX - this.gridNodesX*this.gridNodesY, karc, new vec2(0, this.gridNodesY*this.gridSpacingY));
+
+						this.forces1[i] = new vec2(0, 0);
+						this.forces2[i] = new vec2(0, 0);
+						this.nodes[i++] = new gridNode(new vec2(x*this.gridSpacingX+this.gridDeltaX, y*this.gridSpacingY+this.gridDeltaY), 1, 5);
+						//this.nodes[i-1].mu = 0.0;
+						
+						if (x == 0 ||x == this.gridNodesX-1)
+							this.nodes[i-1].mu = 0;
+						
+						if (!periodic_bounds) {
+							if (x == 0 || y == 0 || x == this.gridNodesX-1 || y == this.gridNodesY-1)
+								this.nodes[i-1].mu = 0;
+						}
+					}
+			},
+			zero_speeds : function() {
+				for (var i=0; i<this.nodes.length; i++)
+					this.nodes[i].spd.zero();
+			},
+			draw : function(context) {
+				this.nodes.forEach(function(entry) { entry.draw(context); });
+	
+				for (var i=0; i<this.arcs.length; i++)
+					this.arcs[i].draw(context, this);
+			},
+			update : function(canvas, dt) {
+				// swap forces1, forces2. forces1 = a(t)
+				var sw = this.forces1;
+				this.forces1 = this.forces2;
+				this.forces2 = sw;
+			
+				// pos = pos + vt + 1/2 a t^2
+				for (var i=0; i<this.nodes.length; i++)
+					this.nodes[i].pos.inc(this.nodes[i].spd.mul(dt).add(this.forces1[i].mul(dt*dt/2)).mul(this.nodes[i].mu));
+				
+				// zero forces a(t+dt)
+				for (var i=0; i<this.nodes.length; i++)
+					this.forces2[i] = new vec2(0, 0);
+					
+				// forces2 = a(t+dt)
+				for (var i=0; i<this.arcs.length; i++) {
+					var n1 = this.arcs[i].n1;
+					var n2 = this.arcs[i].n2;
+					
+					var dr =  this.nodes[n1].pos.sub(this.nodes[n2].pos).sub(this.arcs[i].corr);
+					var f = dr.mul(this.arcs[i].k);
+					
+					this.forces2[n1].dec(f);
+					this.forces2[n2].inc(f);
+				}
+				
+				// v = 1/2 [ a(t) + a(t+dt) ]
+				for (var i=0; i<this.nodes.length; i++) {
+					this.nodes[i].spd.inc(this.forces1[i].add(this.forces2[i]).mul(dt/2/this.nodes[i].mass));
+					this.nodes[i].spd.mul(this.nodes[i].mu);
+				}
+			},
+			select: function(clickpos) {
+				this.deselect();
+				
+				for (var i=0; i<this.nodes.length; i++) {
+					if (this.nodes[i].pos.sub(clickpos).length2() < this.nodes[i].radius*this.nodes[i].radius) {
+						this.selected = i;
+						return;
+					}
+				}
+			},
+			move_selected: function(p) {
+				if (this.selected >= 0)
+					this.nodes[this.selected].pos = p;
+			},
+			deselect: function() {
+				this.selected = -1;
+			},
+			energyK: function() {
+				var E = 0;
+				
+				for (var i=0; i<this.nodes.length; i++)
+					E += this.nodes[i].mass * this.nodes[i].spd.length2();
+				
+				return E;
+			},
+			energyU: function() {
+				var E = 0;
+				
+				for (var i=0; i<this.arcs.length; i++) {
+					var n1 = this.arcs[i].n1;
+					var n2 = this.arcs[i].n2;
+					E += this.arcs[i].k * this.nodes[n1].pos.sub(this.nodes[n2].pos).sub(this.arcs[i].corr).length2();
+				}
+				
+				return E;
+			}
+		}
+		
+		
+		var theGrid;
+			
+		// 2.main functions
+		function initialize() {
+			theGrid = new Grid(151, 1, 10, 30, canvas);
+		}
+
+		function draw(context, canvas) {
+			// draw x axis
+			context.strokeStyle = 'red';
+			context.beginPath();
+			context.moveTo(0, canvas.height/2);
+			context.lineTo(canvas.width, canvas.height/2);
+			context.stroke();
+			// draw y axis
+			context.beginPath();
+			context.strokeStyle = 'green';
+			context.moveTo(canvas.width/2, 0);
+			context.lineTo(canvas.width/2, canvas.height);
+			context.stroke();
+			context.strokeStyle = 'black';
+				
+			theGrid.draw(context, canvas);
+		}
+		
+		function update(canvas, context, time) {
+			theGrid.update(canvas, time);
+		}
+		
+		
+		var clicked = false;
+		var selectwaspaused = false;
+		
+		function mousedown(event) {
+			clicked = true;
+			var lastclick = new vec2(event.pageX, event.pageY);
+
+			selectwaspaused = pause;
+			theGrid.select(lastclick);
+			if (!pause)
+				pause = theGrid.selected >= 0;	// if running and click is valid (on a node): pause
+		}
+		function mousemove(event) {
+			if (clicked)
+				theGrid.move_selected(new vec2(event.pageX, event.pageY));
+		}
+		function mouseup(event) {
+			theGrid.deselect();
+			clicked = false;
+			pause = selectwaspaused;			// restore pre-click play state
+		}
+		function keypress(event) {
+			switch (event.key) {
+				case 'p':
+					pause = !pause;
+					break;
+				case 'e':
+					var K = theGrid.energyK();
+					var U = theGrid.energyU();
+					log("K: "+ K +"\nU: "+ U+"\nE: "+(K+U));
+					break;
+				case 'z':
+					theGrid.reset();
+					break;
+				case 's':
+					theGrid.zero_speeds();
+					break;
+				case 'y':
+					theGrid.nodes[theGrid.nodes.length/2|0].pos.y -= 5;
+					break;
+				case '+': animation_speed = animation_speed >= 1 ? animation_speed+1 : animation_speed*2; break;
+				case '-': animation_speed = animation_speed > 1 ? animation_speed-1 : animation_speed/2; break;
+				case '0': animation_speed = 1; break;
+			}
+		}
+		
+		// 3.global stuff
+		var pause = false;
+		var FPS = 60;
+		var animation_speed = 1;
+		var canvas = document.getElementById('myCanvas');
+		var context = canvas.getContext('2d');
+
+		window.requestAnimFrame = (function(callback) {
+			return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
+			function(callback) { window.setTimeout(callback, 1000 / FPS); };
+		})();
+		
+		function log(text) {
+			pause = true;
+			alert(text);
+		}
+
+		var prevTime = -1;	// for dt
+		var startTime = -1;
+		
+		function mainloop(canvas, context) {
+			var now = (new Date()).getTime();
+			if (startTime < 0) startTime = now;								// set time0, if not yet initialized
+			if (prevTime < 0) prevTime = now;								// set prevTime, if not yet initialized
+			var dt = 1000 / FPS; //now - prevTime;
+			prevTime = now;
+			
+			if (!pause)
+				update(canvas, context, dt*animation_speed/1000);			// update
+				
+			context.clearRect(0, 0, canvas.width, canvas.height);			// clear
+			draw(context, canvas);											// draw
+			requestAnimFrame(function() { mainloop(canvas, context); });	// request new frame
+		}
+		
+		var waspaused = false;
+		window.onblur = function() { waspaused = pause; pause = true; };	// on lose focus: pause
+		window.onfocus = function() { pause = waspaused; };					// on focus: unpause, if needed
+		// register mouse and keyboard event listeners
+		window.addEventListener("keypress", keypress, false);
+		canvas.addEventListener('mousedown', mousedown, false);
+		canvas.addEventListener('mousemove', mousemove, false);
+		canvas.addEventListener('mouseup', mouseup, false);
+		initialize();
+		mainloop(canvas, context);
+    </script>
+  </body>
+</html>     

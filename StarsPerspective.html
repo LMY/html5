@@ -1,0 +1,136 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <style>
+      body {
+        margin: 0px;
+        padding: 0px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="1600" height="900" />
+    <script>
+		function perspectiveX(xp, zp) {
+			return xp * (1 - zp/zclip) + centerx;
+		}
+
+		function perspectiveY(yp, zp) {
+			return yp * (1 - zp/zclip) + centery;
+		}
+		
+		function reset_particle(i) {
+			positions[i] = [];
+			
+			positions[i][0] = (2*Math.random()-1) * canvas.width;
+			positions[i][1] = (2*Math.random()-1) * canvas.height;
+			positions[i][2] = Math.random() * zclip;
+			
+			speeds[i] = (forcemaxspeed?1:Math.random()) * maxspeed;
+		}
+
+		function initialize(canvas) {
+			positions = [];
+			speeds = [];
+
+			for (var i=0; i<starn; i++)
+				reset_particle(i);
+		}
+
+		function draw(context, canvas) {
+			// clear screen
+			if (!hyperspace) {
+				context.fillStyle = backgroundColor;
+				context.fillRect(0,0, canvas.width, canvas.height);
+			}
+
+			for (var i=0; i<positions.length; i++) {
+				context.beginPath();
+				
+				var tempcolor = Math.floor(255 * (zclip-positions[i][2])/zclip);
+				context.fillStyle = 'rgb(' + tempcolor + ',' + tempcolor + ',' + tempcolor + ')';
+				
+				context.arc(perspectiveX(positions[i][0], positions[i][2]), perspectiveY(positions[i][1], positions[i][2]), starRadious, 0, Math.PI*2, true);
+				context.closePath();
+				context.fill();  
+			}
+		}
+		
+		function update(canvas, context, deltaT) {
+			for (var i=0; i<positions.length; i++) {
+				positions[i][2] -= speeds[i];
+				
+				var perspectivex = perspectiveX(positions[i][0], positions[i][2]);
+				var perspectivey = perspectiveY(positions[i][1], positions[i][2]);
+				
+				if (positions[i][2] < 0 || positions[i][2] > zclip ||perspectivex < 0 || perspectivex > canvas.width || perspectivey < 0 || perspectivey > canvas.height)
+					reset_particle(i);
+			}
+		}
+
+		var canvas = document.getElementById('myCanvas');
+		var context = canvas.getContext('2d');
+		
+		var backgroundColor="black";
+		var starColor="white";
+		var starRadious=3;
+		var planen=3;
+		var starn=250;
+		var zclip = 200;
+		var maxspeed = 2.5;			// anche valori negativi :)
+
+		var forcemaxspeed=false;
+		var hyperspace=false;
+
+		var centerx = myCanvas.width/2
+		var centery = myCanvas.height/2;
+			
+		var positions;
+		var speeds;
+		
+		function keypress(event) {
+			switch (event.key) {
+				case 'p':
+					pause = !pause;
+					break;
+				case '+': animation_speed = animation_speed >= 1 ? animation_speed+1 : animation_speed*2; break;
+				case '-': animation_speed = animation_speed > 1 ? animation_speed-1 : animation_speed/2; break;
+				case '0': animation_speed = 1; break;
+				
+				case 'r': initialize(canvas); break;
+				case 'f': forcemaxspeed=!forcemaxspeed; break;
+				case 'h': hyperspace=!hyperspace; break;
+				case 'b': backgroundColor = backgroundColor == "white" ? "black" : "white"; break;
+			}
+		}
+		
+		// 3.global stuff
+		var pause = false;
+		var FPS = 60;
+		var animation_speed = 1;
+
+
+		window.requestAnimFrame = (function(callback) {
+			return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
+			function(callback) { window.setTimeout(callback, 1000 / FPS); };
+		})();
+		
+		function mainloop(canvas, context) {
+			var dt = 1000 / FPS;
+			if (!pause)
+				update(canvas, context, dt*animation_speed/1000);			// update
+				
+			draw(context, canvas);											// draw
+			requestAnimFrame(function() { mainloop(canvas, context); });	// request new frame
+		}
+		
+		var waspaused = false;
+		window.onblur = function() { waspaused = pause; pause = true; };	// on lose focus: pause
+		window.onfocus = function() { pause = waspaused; };					// on focus: unpause, if needed
+		// register mouse and keyboard event listeners
+		window.addEventListener("keypress", keypress, false);
+		initialize(canvas);
+		mainloop(canvas, context);
+    </script>
+  </body>
+</html>     

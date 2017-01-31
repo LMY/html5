@@ -1,0 +1,175 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <style>
+      body {
+        margin: 0px;
+        padding: 0px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="1600" height="900" />
+    <script>
+
+		function vec2(tx, ty) {
+			this.x = tx;
+			this.y = ty;
+		}
+		vec2.prototype = {
+			zero: function() { this.x = 0; this.y = 0; },
+			add: function(p) { return new vec2(this.x+p.x, this.y+p.y); },
+			sub: function(p) { return new vec2(this.x-p.x, this.y-p.y);	},
+			mul: function(k) { return new vec2(this.x*k, this.y*k);	},
+			div: function(k) { return new vec2(this.x/k, this.y/k);	},
+			inv: function()  { return mul(-1); },
+			dot: function(p) { return this.x*p.x + this.y*p.y; },
+			inc: function(p) { this.x += p.x; this.y += p.y; },
+			dec: function(p) { this.x -= p.x; this.y -= p.y; },
+			pmul: function(k) { this.x *= k; this.y *= k; },
+			length2 : function() { return this.x * this.x + this.y * this.y; }
+		}
+		vec2.null = new vec2(0, 0);
+		
+
+		function Plane(nnodes, spacing, alpha, canvas) {
+			this.points = [];
+			this.spacing = spacing;
+			this.gridNodes = nnodes;
+			this.alpha = alpha;
+			
+			var ss = (canvas.width - (this.gridNodes-1)*this.spacing)/2;
+			
+			for (var i=0; i<this.gridNodes; i++)
+				this.points[i] = new vec2(ss + i * this.spacing, canvas.height/2);
+		}
+		Plane.prototype = {
+			draw : function(context) {
+				context.strokeStyle = 'rgba(' + 0 + ',' + 0 + ',' + 255 + ',' + this.alpha + ')';
+			
+				for (i = 0; i<this.points.length-1; i++) {
+					context.beginPath();
+					context.moveTo(this.points[i].x, this.points[i].y);
+					context.lineTo(this.points[i+1].x, this.points[i+1].y);
+					context.closePath();
+					context.stroke();
+				}
+			},
+			randomize(Ymin, Ymax) {
+				for (var i=0; i<this.gridNodes; i++)
+					this.points[i] = new vec2(this.points[i].x, Ymin + (Ymax-Ymin)*Math.random());
+			}
+		}
+		
+		
+		function Graph(nnodes, spacing, alpha, canvas) {
+			this.lines = [];
+			this.reset(nnodes, spacing, alpha, canvas);
+		}
+		Graph.prototype = {
+			reset : function(nnodes, spacing, alpha, canvas) {
+				for (var i=0; i<alpha; i++) {
+					this.lines[i] = new Plane(nnodes, spacing, i, canvas);
+					this.lines[i].randomize(canvas.height/2-maxDeltaY, canvas.height/2+maxDeltaY);
+					this.lines[i].alpha = 1 - i/(alpha-1);
+				}
+			},
+			draw : function(context) {
+				for (var i=this.lines.length-1; i>=0; i--)
+					this.lines[i].draw(context);					
+			},
+			update : function(canvas, dt) {
+				for (var i=this.lines.length-1; i>=1; i--) {
+					this.lines[i].alpha = this.lines[i-1].alpha;
+					for (var k=0; k<this.lines[i].gridNodes; k++)
+						this.lines[i].points[k] = this.lines[i-1].points[k];
+				}
+				for (var i=0; i<this.lines.length; i++)
+					this.lines[i].alpha -= 1/(this.lines.length-1);
+					
+				this.lines[0].randomize(canvas.height/2-maxDeltaY, canvas.height/2+maxDeltaY);
+				this.lines[0].alpha = 1;
+			}
+		}
+		
+		
+		var theGraph;
+			
+		// 2.main functions
+		function initialize(canvas) {
+			theGraph = new Graph(81, 20, 7, canvas);
+		}
+
+		function draw(context, canvas) {
+			// draw x axis
+			context.strokeStyle = 'red';
+			context.beginPath();
+			context.moveTo(0, canvas.height/2);
+			context.lineTo(canvas.width, canvas.height/2);
+			context.stroke();
+			// draw y axis
+			context.beginPath();
+			context.strokeStyle = 'green';
+			context.moveTo(canvas.width/2, 0);
+			context.lineTo(canvas.width/2, canvas.height);
+			context.stroke();
+			context.strokeStyle = 'black';
+				
+			theGraph.draw(context, canvas);
+		}
+		
+		function update(canvas, context, time) {
+			theGraph.update(canvas, time);
+		}
+				
+
+		function keypress(event) {
+			switch (event.key) {
+				case 'p': pause = !pause; break;
+				case 'z': initialize(canvas); break;
+
+				case '+': animation_speed = animation_speed > 1 ? animation_speed+1 : 1; break;
+				case '0': animation_speed = 1; break;
+				case '-': animation_speed = animation_speed > 1 ? animation_speed-1 : 1; break;
+			}
+		}
+		
+		// 3.global stuff
+		var pause = false;
+		var FPS = 60;
+		var animation_speed = 10;
+		var canvas = document.getElementById('myCanvas');
+		var context = canvas.getContext('2d');
+		var maxDeltaY = canvas.height/6;
+
+		
+		window.requestAnimFrame = (function(callback) {
+			return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
+			function(callback) { window.setTimeout(callback, 1000 / FPS); };
+		})();
+		
+		var framenumber = 0;
+		
+		function mainloop(canvas, context) {
+			var dt = 1 / FPS;
+			
+			if (!pause) {
+				if (++framenumber % animation_speed == 0)
+					update(canvas, context, dt);							// update
+			}
+				
+			context.clearRect(0, 0, canvas.width, canvas.height);			// clear
+			draw(context, canvas);											// draw
+			requestAnimFrame(function() { mainloop(canvas, context); });	// request new frame
+		}
+		
+		var waspaused = false;
+		window.onblur = function() { waspaused = pause; pause = true; };	// on lose focus: pause
+		window.onfocus = function() { pause = waspaused; };					// on focus: unpause, if needed
+		// register mouse and keyboard event listeners
+		window.addEventListener("keypress", keypress, false);
+		initialize(canvas);
+		mainloop(canvas, context);
+    </script>
+  </body>
+</html>     
