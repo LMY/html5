@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<title>Balls that find path</title>
+
+	<style type="text/css">
+body { margin: 0; padding: 0 }
+#testCanvas { position: absolute; width: 100%; height: 100%; overflow: hidden }
+</style>
+
+	
+	<link href="assets/demoStyles.css" rel="stylesheet" type="text/css" />
+
+	<script type="text/javascript" src="easeljs/events/EventDispatcher.js"></script>
+	<script type="text/javascript" src="easeljs/utils/UID.js"></script>
+	<script type="text/javascript" src="easeljs/geom/Matrix2D.js"></script>
+	<script type="text/javascript" src="easeljs/geom/Rectangle.js"></script>
+	<script type="text/javascript" src="easeljs/geom/Point.js"></script>
+	<script type="text/javascript" src="easeljs/display/DisplayObject.js"></script>
+	<script type="text/javascript" src="easeljs/display/Container.js"></script>
+	<script type="text/javascript" src="easeljs/display/Stage.js"></script>
+	<script type="text/javascript" src="easeljs/events/MouseEvent.js"></script>
+	<script type="text/javascript" src="easeljs/display/Shape.js"></script>
+	<script type="text/javascript" src="easeljs/display/Graphics.js"></script>
+	<script type="text/javascript" src="easeljs/utils/Ticker.js"></script>
+	<script type="text/javascript" src="easeljs/display/Text.js"></script>
+
+	<!-- We also provide hosted minified versions of all CreateJS libraries.
+	  http://code.createjs.com -->
+
+	<script>
+	
+	document.onkeydown = handleKeyDown;
+	
+	var canvas;
+	var stage;
+	var frameCount;
+
+	var pos;
+	var spd;
+	var dest;
+	var colors;
+
+	var obstacles;
+
+	// "pathfinding"
+	var tempdest;
+	var trydest;
+	var completed = 0;
+
+	var particlen = 7;
+	var obstaclesNumber = 100;
+	var display_lines = false;
+
+	var maxspeed = 5;
+	var randompath_rounds = 30;
+	var random_chance_rerandom = 0.35;
+	var radious = 10;
+
+	
+
+	function init()
+	{
+		if (window.top != window)
+			document.getElementById("header").style.display = "none";
+
+		canvas = document.getElementById("testCanvas");
+		stage = new createjs.Stage(canvas);
+
+		pos = new Array();
+		spd = new Array();
+		dest = new Array();
+		colors = new Array();
+		
+		tempdest = new Array();
+		trydest = new Array();
+		
+		obstacles = new Array();
+		
+		completed = 0;
+		frameCount = 0;
+
+		initializeObstacles();
+		initializeGridBall();
+		
+		uncollide();
+		
+		createjs.Ticker.useRAF = true;
+		createjs.Ticker.setFPS(60);
+		createjs.Ticker.addEventListener("tick", tick);
+	}
+	
+	function initializeGridBall()
+	{
+		var partid = 0;
+		
+		for (y=0; y<particlen; y++)
+			for (x=0; x<particlen; x++)
+			{
+				var posx = (canvas.width*(x+0.5)/(particlen))|0;
+				var posy = (canvas.height*(y+0.5)/(particlen))|0;
+			
+				pos[partid] = new createjs.Point(posx, posy);
+				spd[partid] = maxspeed;
+				do {
+					dest[partid] = newDest();
+				}
+				while (destinationCollides(partid) || collideObstacles(dest[partid]));
+					
+				colors[partid] = randomColor();
+				
+				tempdest[partid] = 0;
+				trydest[partid] = 0;
+				
+				
+				partid++;
+			}
+	}
+	
+	function initializeObstacles()
+	{
+		for (i=0; i<obstaclesNumber; i++)
+		{
+			var posx = Math.random()*canvas.width;
+			var posy = Math.random()*canvas.height;
+			var dimx = Math.random()*canvas.width/10;
+			var dimy = Math.random()*canvas.height/10;
+			
+			obstacles[i] = new createjs.Rectangle(posx, posy, dimx, dimy);
+		}
+	}
+	
+	function uncollide()
+	{
+		for (i=0; i<pos.length; i++)
+			while (collide(i, pos[i]) || collideObstacles(pos[i]))
+			{
+				pos[i].x = (Math.random()*canvas.width)|0;
+				pos[i].y = (Math.random()*canvas.height)|0;
+			}
+	}
+	
+	
+	
+	function destinationCollides(i)
+	{
+		for (k=0; k<dest.length; k++)
+			if (k != i)
+				if (distance(dest[k], dest[i]) <= 2*radious)
+					return true;
+		
+		return false;
+	}
+	
+	
+	
+	function randomColor()
+	{
+		var ret = "#";
+		
+		for (timei=0; timei<3; timei++)
+		{
+			var rnum = timei==0?0:Math.random()*16;
+			ret += (rnum|0).toString(16);
+		}
+
+		return ret;	
+	}
+	
+	
+	function newDest()
+	{
+		return new createjs.Point(Math.random()*canvas.width, Math.random()*canvas.height);
+	}
+
+	function newTempDest(i)
+	{
+		var dx = Math.random()*canvas.width;
+		var dy = Math.random()*canvas.height;
+		return new createjs.Point(dx, dy);
+	}
+	
+	function distance(a, b)
+	{
+		return Math.sqrt(Math.pow(a.x-b.x, 2) + Math.pow(a.y-b.y, 2));
+	}
+	
+	function walk(from, to, speed)
+	{
+		var dist = distance(from, to);
+		
+		if (dist > speed)
+		{
+			var xxx = from.x + speed * (to.x-from.x)/dist;
+			var yyy = from.y + speed * (to.y-from.y)/dist;
+			return new createjs.Point(xxx, yyy);
+		}
+		else
+			return to;
+	}
+	
+	function random_walk(from, speed)
+	{
+		var angle = Math.random()*2*Math.PI;
+		return new createjs.Point(from.x + speed*Math.cos(angle), from.y + speed*Math.sin(angle));
+	}
+	
+	
+	function tick()
+	{
+		evolve();
+		stage.removeAllChildren();
+		drawScene();
+
+		frameCount++;
+	}
+	
+	
+	function collide(i,newpos)
+	{
+		for (c=0; c<pos.length; c++)
+			if (c != i)
+				if (distance(pos[c], newpos) < 2*radious)
+					return true;
+				
+		return false;
+	}
+	
+	function collideObstacles(newpos)
+	{
+		for (c=0; c<obstacles.length; c++)
+			if (newpos.x >= obstacles[c].x - radious &&
+				newpos.y >= obstacles[c].y - radious &&
+				newpos.x <= obstacles[c].x+obstacles[c].width + radious &&
+				newpos.y <= obstacles[c].y+obstacles[c].height+ radious)
+				return true;
+				
+		return false;
+	}
+	
+	function try_to_move(i, to)
+	{
+		var dist = distance(to, pos[i]);
+		var newpos = walk(pos[i], to, spd[i]);
+		
+		if (to.x < 0 || to.x > canvas.width || to.y < 0 || to.y > canvas.height)
+			return false;		
+		
+		if (!collide(i, newpos) && !collideObstacles(newpos))
+		{
+			pos[i] = newpos;
+			return true;
+		}
+		else
+			return false;
+	}
+	
+	
+	function evolve()
+	{
+		for (i=0; i<pos.length; i++)
+		{
+			if (spd[i] == 0)
+				continue;
+
+			var dist = distance(dest[i], pos[i]);
+
+			if (dist == 0) {
+				completed++;
+				console.log("COMPLETED: @frame = "+frameCount+"    "+completed+"/"+pos.length+"   "+(100*(completed/pos.length))+" %");
+				
+				spd[i] = 0;
+				colors[i] = "#ff0000";
+				continue;
+			}
+
+			
+			if (trydest[i] == 0)
+			{
+				if (try_to_move(i, dest[i]))
+					continue;
+				else
+				{
+					trydest[i] = (randompath_rounds)|0;
+					tempdest[i] = random_walk(pos[i], randompath_rounds*spd[i]);
+				}
+			}
+			
+			trydest[i]--;
+			
+			if (trydest[i] == 0)
+			{
+				if (Math.random() < random_chance_rerandom)
+				{
+					trydest[i] = (randompath_rounds)|0;
+					tempdest[i] = random_walk(pos[i], randompath_rounds*spd[i]);
+				}
+			}
+			
+			if (!try_to_move(i, tempdest[i]))
+			{
+				for (rwt=0; rwt<5; rwt++)
+				{
+					tempdest[i] = random_walk(pos[i], trydest[i]*spd[i]);
+					if (try_to_move(i, tempdest[i]))
+						break;
+				}
+			}
+				
+			if (trydest[i] == 0)
+				tempdest[i] = 0;
+		}
+	}
+	
+	
+	function drawScene()
+	{
+		var line = new createjs.Shape();
+		var drawline = false;
+
+		for (i=0; i<pos.length; i++)
+		{
+			var shape = new createjs.Shape();
+			shape.graphics.beginFill(colors[i]).drawCircle(pos[i].x, pos[i].y, radious);
+			stage.addChild(shape);
+			
+			//if (spd[i] > 0  &&  trydest[i] == 0)
+			//{
+			if (display_lines)
+			{
+				if (spd[i] > 0) {
+					drawline = true;
+					line.graphics.setStrokeStyle(1).beginStroke("#ff0000").moveTo(pos[i].x, pos[i].y).lineTo(dest[i].x, dest[i].y);
+					if (tempdest[i] != 0)
+						line.graphics.setStrokeStyle(1).beginStroke("#00ff00").moveTo(pos[i].x, pos[i].y).lineTo(tempdest[i].x, tempdest[i].y);
+				}
+			}
+			//}
+		}
+
+		if (drawline)
+			stage.addChild(line);
+			
+		// draw obstacles
+		for (i=0; i<obstacles.length; i++)
+		{
+			var rect = new createjs.Shape();
+			rect.graphics.beginFill("#444444").drawRect(obstacles[i].x, obstacles[i].y, obstacles[i].width, obstacles[i].height);
+			stage.addChild(rect);
+		}
+			
+		
+		stage.update();
+	}
+	
+	function handleKeyDown(e) {
+		//cross browser issues exist
+		if(!e){ var e = window.event; }
+		switch(e.keyCode) {
+			case 65:
+				display_lines = !display_lines;
+				return false;
+		}
+	}
+	
+	</script>
+</head>
+	
+<body onload="init();">
+	<header id="header" class="EaselJS">
+	</header>
+
+    <div class="canvasHolder">
+
+		<canvas id="testCanvas" width="1600" height="900"></canvas>
+	</div>
+
+</body>
+</html>
